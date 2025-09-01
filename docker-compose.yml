@@ -1,5 +1,4 @@
 # Essential services for AppFlowy Cloud
-
 services:
   nginx:
     restart: on-failure
@@ -11,7 +10,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
-
+    networks:
+      - appflowy-network
+      
   # You do not need this if you have configured to use your own s3 file storage
   minio:
     restart: on-failure
@@ -23,7 +24,9 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
-
+    networks:
+      - appflowy-network
+      
   postgres:
     restart: on-failure
     image: pgvector/pgvector:pg16
@@ -39,11 +42,15 @@ services:
       retries: 12
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
+    networks:
+      - appflowy-network
+      
   redis:
     restart: on-failure
     image: redis
-
+    networks:
+      - appflowy-network
+      
   gotrue:
     restart: on-failure
     build:
@@ -109,7 +116,9 @@ services:
       # SAML 2.0 OAuth config
       - GOTRUE_SAML_ENABLED=${GOTRUE_SAML_ENABLED}
       - GOTRUE_SAML_PRIVATE_KEY=${GOTRUE_SAML_PRIVATE_KEY}
-
+    networks:
+      - appflowy-network
+      
   appflowy_cloud:
     restart: on-failure
     environment:
@@ -149,7 +158,9 @@ services:
     depends_on:
       gotrue:
         condition: service_healthy
-
+    networks:
+      - appflowy-network
+      
   admin_frontend:
     restart: on-failure
     build:
@@ -167,7 +178,9 @@ services:
         condition: service_healthy
       appflowy_cloud:
         condition: service_started
-
+    networks:
+      - appflowy-network
+      
   ai:
     restart: on-failure
     image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
@@ -179,7 +192,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
+      appflowy_cloud:
+        condition: service_started
+    networks:
+      - appflowy-network
+      
   appflowy_worker:
     restart: on-failure
     image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
@@ -209,12 +226,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
+    networks:
+      - appflowy-network
+      
   appflowy_web:
     restart: on-failure
     image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
     depends_on:
       - appflowy_cloud
+    environment:
+      - APPFLOWY_BASE_URL=${APPFLOWY_BASE_URL}
+      - APPFLOWY_GOTRUE_BASE_URL=${APPFLOWY_BASE_URL}/gotrue
+      - APPFLOWY_WS_BASE_URL=${APPFLOWY_WEBSOCKET_BASE_URL}
+    networks:
+      - appflowy-network
+
+networks:
+  appflowy-network:
+    driver: bridge
+
 volumes:
   postgres_data:
   minio_data:
